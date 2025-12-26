@@ -117,7 +117,9 @@ try:
     fig.update_yaxes(title_text="Cantidad de Pacientes", row=1, col=1)
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', row=2, col=1)
 
-    fig.show()
+   
+    fig.write_html("index.html", full_html=True, include_plotlyjs='cdn')
+    print("¡Archivo index.html generado con éxito!")
 
 except Exception as e:
     print(f"Error al sincronizar el dashboard: {e}")
