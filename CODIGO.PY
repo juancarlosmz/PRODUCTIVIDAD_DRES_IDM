@@ -2,137 +2,121 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# --- 1. CONFIGURACIÓN DE URLs Y CARGA DE DATOS ---
+# --- 1. CONFIGURACIÓN DE URLs ---
 file_id_1 = '1sxymGTqTCsHaI-XQkFWu8-r9WEuRPhc_J-KSdQrI9Ho' # Pacientes
-url_1 = f'https://docs.google.com/spreadsheets/d/{file_id_1}/export?format=xlsx'
-
 file_id_2 = '1vQc4s4zd2bZwT_zB4DGPWk8-ks5obuwc_tSqdAOy4_c' # Tiempos
-url_2 = f'https://docs.google.com/spreadsheets/d/{file_id_2}/export?format=xlsx'
+file_id_3 = '1OXzM_IV5DvCX-OQvdd6UI6s_-K8clz4jyECDLG5G91A' # Envío
+file_id_4 = '1bd48YX_rcTaZO3Uxto-m9oq6-va0yOVfBRFqncOG_Do' # Tomas (Usuarios)
+
+urls = [f'https://docs.google.com/spreadsheets/d/{uid}/export?format=xlsx' for uid in [file_id_1, file_id_2, file_id_3, file_id_4]]
 
 try:
-    df1 = pd.read_excel(url_1)
-    df2 = pd.read_excel(url_2)
+    # Carga de datos
+    df1 = pd.read_excel(urls[0]); df2 = pd.read_excel(urls[1])
+    df3 = pd.read_excel(urls[2]); df4 = pd.read_excel(urls[3])
     
     sedes = ["MIRAFLORES", "JESUS MARÍA", "SURCO"]
+    # Nota: Aquí puedes agregar o modificar los nombres de los usuarios según aparezcan en tu Excel
+    usuarios_tomas = df4.iloc[:, 0].dropna().unique().tolist() 
+    
     meses_nombres = ["MAYO", "JUNIO", "JULIO", "AGOSTO", "SETIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
     
+    # Limpieza de nombres de sedes y usuarios (evita errores de espacios o minúsculas)
+    for df in [df1, df2, df3, df4]:
+        df.iloc[:, 0] = df.iloc[:, 0].astype(str).str.strip().str.upper()
+
     df1_sedes = df1[df1.iloc[:, 0].isin(sedes)].copy()
     df1_total = df1[df1.iloc[:, 0] == "TOTAL"].copy()
     df2_sedes = df2[df2.iloc[:, 0].isin(sedes)].copy()
+    df3_sedes = df3[df3.iloc[:, 0].isin(sedes)].copy()
+    df4_data = df4[df4.iloc[:, 0].isin([u.upper() for u in usuarios_tomas])].copy()
 
-    # --- 2. CREACIÓN DEL DASHBOARD (5 FILAS) ---
+    # --- 2. CREACIÓN DEL DASHBOARD (9 FILAS) ---
     fig = make_subplots(
-        rows=5, cols=1,
-        vertical_spacing=0.05,
+        rows=9, cols=1, vertical_spacing=0.02,
         subplot_titles=(
-            "Semaforo: Cantidad de Pacientes", 
-            "Evolución Histórica de Pacientes", 
-            "Participación por Sede (%)",
-            "<b>Tiempos de Atención por Mes (Minutos)</b>",
-            "Tendencia Histórica de Tiempos (Rapidez)"
+            "Semaforo: Cantidad de Pacientes", "Evolución Histórica de Pacientes", "Participación por Sede (%)",
+            "Tiempos de Atención (Minutos)", "Tendencia Histórica de Tiempos",
+            "Semaforo: Tiempo de Envío", "Tendencia Histórica de Envío",
+            "Semaforo: Cantidad de Tomas por Usuario", "Tendencia Histórica de Tomas"
         ),
-        specs=[[{"type": "bar"}], [{"type": "scatter"}], [{"type": "pie"}], [{"type": "bar"}], [{"type": "scatter"}]]
+        specs=[[{"type": "bar"}], [{"type": "scatter"}], [{"type": "pie"}], 
+               [{"type": "bar"}], [{"type": "scatter"}], [{"type": "bar"}], 
+               [{"type": "scatter"}], [{"type": "bar"}], [{"type": "scatter"}]]
     )
 
     # --- 3. GENERAR TRACES ---
 
-    # A. BARRAS PACIENTES (Fila 1) - 8 traces (0-7)
+    # A, B, C: PACIENTES
     for i, mes in enumerate(meses_nombres):
-        valores = pd.to_numeric(df1_sedes[mes], errors='coerce').fillna(0)
-        colores = '#3498DB'
-        if i > 0:
-            prev = pd.to_numeric(df1_sedes[meses_nombres[i-1]], errors='coerce').fillna(0)
-            colores = ['#27AE60' if a >= p else '#E74C3C' for a, p in zip(valores, prev)]
-        
-        fig.add_trace(go.Bar(
-            x=df1_sedes.iloc[:, 0], y=valores, name=f"Pac. {mes}",
-            text=valores, textposition='outside', marker_color=colores,
-            visible=(mes == "DICIEMBRE"), showlegend=False
-        ), row=1, col=1)
-
-    # B. TENDENCIA PACIENTES (Fila 2 - Estática) - 4 traces (8-11)
-    for sede in sedes:
-        val_h = [df1_sedes[df1_sedes.iloc[:, 0] == sede][m].values[0] for m in meses_nombres]
-        fig.add_trace(go.Scatter(x=meses_nombres, y=val_h, name=f"Pac. {sede}", mode='lines+markers'), row=2, col=1)
-    
-    val_t = [df1_total[m].values[0] for m in meses_nombres]
-    fig.add_trace(go.Scatter(x=meses_nombres, y=val_t, name="TOTAL PAC.", line=dict(dash='dash', color='black')), row=2, col=1)
-
-    # C. PIE PARTICIPACIÓN (Fila 3) - 8 traces (12-19)
+        val = pd.to_numeric(df1_sedes[mes], errors='coerce').fillna(0)
+        col = ['#27AE60' if i>0 and a >= pd.to_numeric(df1_sedes[meses_nombres[i-1]], errors='coerce').fillna(0).iloc[idx] else '#E74C3C' for idx, a in enumerate(val)] if i>0 else '#3498DB'
+        fig.add_trace(go.Bar(x=df1_sedes.iloc[:, 0], y=val, marker_color=col, visible=(mes=="DICIEMBRE"), text=val, textposition='outside', showlegend=False), row=1, col=1)
+    for s in sedes:
+        fig.add_trace(go.Scatter(x=meses_nombres, y=[df1_sedes[df1_sedes.iloc[:, 0]==s][m].values[0] if not df1_sedes[df1_sedes.iloc[:, 0]==s].empty else 0 for m in meses_nombres], name=f"Pac. {s}"), row=2, col=1)
     for mes in meses_nombres:
-        val_p = pd.to_numeric(df1_sedes[mes], errors='coerce').fillna(0)
-        fig.add_trace(go.Pie(
-            labels=df1_sedes.iloc[:, 0], values=val_p, hole=.4,
-            visible=(mes == "DICIEMBRE"), textinfo='label+percent'
-        ), row=3, col=1)
+        fig.add_trace(go.Pie(labels=df1_sedes.iloc[:, 0], values=pd.to_numeric(df1_sedes[mes], errors='coerce').fillna(0), visible=(mes=="DICIEMBRE")), row=3, col=1)
 
-    # D. BARRAS TIEMPOS (Fila 4) - 8 traces (20-27)
+    # D, E: TIEMPOS ATENCIÓN
     for i, mes in enumerate(meses_nombres):
-        val_tiempos = pd.to_numeric(df2_sedes[mes], errors='coerce').fillna(0)
-        # Semáforo inverso para tiempos: si BAJA el tiempo es VERDE
-        colores_t = '#9B59B6'
-        if i > 0:
-            prev_t = pd.to_numeric(df2_sedes[meses_nombres[i-1]], errors='coerce').fillna(0)
-            colores_t = ['#27AE60' if a <= p else '#E74C3C' for a, p in zip(val_tiempos, prev_t)]
+        val = pd.to_numeric(df2_sedes[mes], errors='coerce').fillna(0)
+        col = ['#27AE60' if i>0 and a <= pd.to_numeric(df2_sedes[meses_nombres[i-1]], errors='coerce').fillna(0).iloc[idx] else '#E74C3C' for idx, a in enumerate(val)] if i>0 else '#9B59B6'
+        fig.add_trace(go.Bar(x=df2_sedes.iloc[:, 0], y=val, marker_color=col, visible=(mes=="DICIEMBRE"), text=val, textposition='outside', showlegend=False), row=4, col=1)
+    for s in sedes:
+        fig.add_trace(go.Scatter(x=meses_nombres, y=[df2_sedes[df2_sedes.iloc[:, 0]==s][m].values[0] if not df2_sedes[df2_sedes.iloc[:, 0]==s].empty else 0 for m in meses_nombres], name=f"Reloj {s}"), row=5, col=1)
 
-        fig.add_trace(go.Bar(
-            x=df2_sedes.iloc[:, 0], y=val_tiempos, name=f"T. {mes}",
-            text=val_tiempos, textposition='outside', marker_color=colores_t,
-            visible=(mes == "DICIEMBRE"), showlegend=False
-        ), row=4, col=1)
+    # F, G: TIEMPOS ENVÍO
+    for i, mes in enumerate(meses_nombres):
+        val = pd.to_numeric(df3_sedes[mes], errors='coerce').fillna(0)
+        col = ['#27AE60' if i>0 and a <= pd.to_numeric(df3_sedes[meses_nombres[i-1]], errors='coerce').fillna(0).iloc[idx] else '#E74C3C' for idx, a in enumerate(val)] if i>0 else '#F1C40F'
+        fig.add_trace(go.Bar(x=df3_sedes.iloc[:, 0], y=val, marker_color=col, visible=(mes=="DICIEMBRE"), text=val, textposition='outside', showlegend=False), row=6, col=1)
+    for s in sedes:
+        fig.add_trace(go.Scatter(x=meses_nombres, y=[df3_sedes[df3_sedes.iloc[:, 0]==s][m].values[0] if not df3_sedes[df3_sedes.iloc[:, 0]==s].empty else 0 for m in meses_nombres], name=f"Envío {s}"), row=7, col=1)
 
-    # E. TENDENCIA TIEMPOS (Fila 5 - Estática) - 3 traces (28-30)
-    for sede in sedes:
-        val_th = [df2_sedes[df2_sedes.iloc[:, 0] == sede][m].values[0] for m in meses_nombres]
-        fig.add_trace(go.Scatter(
-            x=meses_nombres, y=val_th, name=f"Reloj {sede}", 
-            mode='lines+markers', line=dict(shape='spline')
-        ), row=5, col=1)
+    # H, I: TOMAS POR USUARIO (Usando df4)
+    for i, mes in enumerate(meses_nombres):
+        val = pd.to_numeric(df4_data[mes], errors='coerce').fillna(0)
+        col = ['#27AE60' if i>0 and a >= pd.to_numeric(df4_data[meses_nombres[i-1]], errors='coerce').fillna(0).iloc[idx] else '#E74C3C' for idx, a in enumerate(val)] if i>0 else '#1ABC9C'
+        fig.add_trace(go.Bar(x=df4_data.iloc[:, 0], y=val, marker_color=col, visible=(mes=="DICIEMBRE"), text=val, textposition='outside', showlegend=False), row=8, col=1)
+    for u in usuarios_tomas:
+        u_up = u.upper()
+        fig.add_trace(go.Scatter(x=meses_nombres, y=[df4_data[df4_data.iloc[:, 0]==u_up][m].values[0] if not df4_data[df4_data.iloc[:, 0]==u_up].empty else 0 for m in meses_nombres], name=f"Tomas: {u}"), row=9, col=1)
 
-    # --- 4. LÓGICA DE FILTRADO ---
+    # --- 4. BOTONES DE FILTRADO ---
     botones = []
-    num_meses = 8
     for i, mes in enumerate(meses_nombres):
-        v_pac_bar = [False] * 8
-        v_pac_line = [True] * 4
-        v_pie = [False] * 8
-        v_time_bar = [False] * 8
-        v_time_line = [True] * 3
-        
-        v_pac_bar[i] = True
-        v_pie[i] = True
-        v_time_bar[i] = True
-        
-        visibilidad_total = v_pac_bar + v_pac_line + v_pie + v_time_bar + v_time_line
-        
-        botones.append(dict(
-            label=f"MES: {mes}",
-            method="update",
-            args=[{"visible": visibilidad_total},
-                  {"title": f"<b>DASHBOARD GERENCIAL - CONTROL {mes}</b>"}]
-        ))
+        # Visibilidad: Barras del mes (P, T, E, To) + Líneas históricas (siempre True)
+        # Calculamos la visibilidad trace por trace
+        mask = []
+        # Agrupamos la lógica de visibilidad para los 9 gráficos
+        for trace in fig.data:
+            if isinstance(trace, go.Bar) or isinstance(trace, go.Pie):
+                mask.append(mes in (trace.name if trace.name else "") or trace.visible == (mes == "DICIEMBRE"))
+            else:
+                mask.append(True) # Scatters siempre visibles
 
-    # --- 5. DISEÑO FINAL ---
+        # Corrección manual de máscara para asegurar sincronía perfecta
+        m_final = [False]*len(fig.data)
+        # Índices manuales basados en la construcción:
+        m_final[i] = True # Bar Pac
+        m_final[8:12] = [True]*4 # Line Pac
+        m_final[12+i] = True # Pie
+        m_final[20+i] = True # Bar Time
+        m_final[28:31] = [True]*3 # Line Time
+        m_final[31+i] = True # Bar Env
+        m_final[39:42] = [True]*3 # Line Env
+        m_final[42+i] = True # Bar Tomas
+        m_final[50:] = [True]*len(usuarios_tomas) # Line Tomas
+
+        botones.append(dict(label=f"MES: {mes}", method="update", args=[{"visible": m_final}]))
+
     fig.update_layout(
-        updatemenus=[dict(
-            active=num_meses-1,
-            buttons=botones,
-            direction="down", x=0.01, y=1.06, showactive=True
-        )],
-        title='<b>DASHBOARD INTEGRAL DE RENDIMIENTO</b>',
-        title_x=0.5,
-        template='plotly_white',
-        height=2000, # Aumentado para 5 gráficas
-        margin=dict(t=150, b=50),
-        legend=dict(orientation="h", yanchor="bottom", y=0.42, xanchor="center", x=0.5)
+        updatemenus=[dict(active=7, buttons=botones, x=0.01, y=1.03)],
+        title='<b>CONTROL GERENCIAL INTEGRADO</b>',
+        height=3800, template='plotly_white', margin=dict(t=150, b=50)
     )
+    #fig.show()
 
-    fig.update_yaxes(title_text="Pacientes", row=1, col=1)
-    fig.update_yaxes(title_text="Minutos", row=4, col=1)
-    fig.update_yaxes(title_text="Minutos", row=5, col=1)
-
-    # fig.show()
-    
     fig.write_html("index.html", full_html=True, include_plotlyjs='cdn')
     print("¡Archivo index.html generado con éxito!")
 
